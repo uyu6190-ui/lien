@@ -74,6 +74,9 @@ const resolveSnsUrl = (key, handle) => {
 
 const SPACER = { s: 20, m: 44, l: 80 };
 
+const isHexColor = (v) => /^#[0-9a-f]{6}$/i.test(String(v || "").trim());
+const colorOr = (v, fallback) => (isHexColor(v) ? String(v).trim() : fallback);
+
 const BLOCK_META = {
   link:   { tag: "LINK",  name: "リンク" },
   image:  { tag: "IMG",   name: "画像" },
@@ -95,10 +98,11 @@ const makeBlankState = () => ({
     bgImage: "",
     overlay: 0.5,
     shape: "line", // line | fill | shadow
+    bioColor: "",
   },
   sns: SNS_LIST.map((s) => ({ key: s.key, enabled: false, handle: "" })),
   blocks: [
-    { id: uid(), type: "link", title: "", desc: "", url: "", thumb: "" },
+    { id: uid(), type: "link", title: "", desc: "", url: "", thumb: "", buttonBg: "", buttonText: "" },
   ],
 });
 
@@ -164,6 +168,7 @@ function buildExportHtml(state) {
   const text = d.darkText ? "#222426" : "#F4F5F6";
   const sub = d.darkText ? "#8A8F94" : "#C6CBD0";
   const line = d.darkText ? "#22242622" : "#F4F5F633";
+  const bioColor = colorOr(d.bioColor, sub);
   const esc = (s) =>
     String(s || "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
@@ -184,11 +189,21 @@ function buildExportHtml(state) {
 
   const blocksHtml = state.blocks
     .map((b) => {
+      const customButtonBg = colorOr(b.buttonBg, "");
+      const customButtonText = colorOr(b.buttonText, "");
+      const customRowCss = [
+        customButtonBg ? `background:${customButtonBg};` : "",
+        customButtonText ? `color:${customButtonText};` : "",
+        customButtonBg && d.shape === "line" ? "border-color:transparent;" : "",
+      ].join("");
+      const rowColor = customButtonText || text;
+      const descColor = customButtonText || sub;
+      const arrowColor = customButtonText || d.accent;
       if (b.type === "link")
-        return `<a class="row" href="${esc(b.url) || "#"}" target="_blank" rel="noopener">
+        return `<a class="row" style="${customRowCss}" href="${esc(b.url) || "#"}" target="_blank" rel="noopener">
   ${b.thumb ? `<img class="thumb" src="${esc(b.thumb)}" alt="" />` : ""}
-  <span class="meta"><span class="title">${esc(b.title)}</span>${b.desc ? `<span class="desc">${esc(b.desc)}</span>` : ""}</span>
-  <span class="arrow">&#8594;</span>
+  <span class="meta"><span class="title" style="color:${rowColor}">${esc(b.title)}</span>${b.desc ? `<span class="desc" style="color:${descColor}">${esc(b.desc)}</span>` : ""}</span>
+  <span class="arrow" style="color:${arrowColor}">&#8594;</span>
 </a>`;
       if (b.type === "spacer") return `<div style="height:${SPACER[b.size] || 44}px"></div>`;
       if (b.type === "text")
@@ -227,7 +242,7 @@ main{width:100%;max-width:440px;text-align:center}
 .avatar{width:92px;height:92px;border-radius:50%;object-fit:cover;border:1px solid ${line};margin-bottom:18px}
 .avatar-ph{width:92px;height:92px;border-radius:50%;border:1px solid ${line};background:${d.accent}26;display:inline-block;margin-bottom:18px}
 h1{font-size:20px;font-weight:700;letter-spacing:.08em}
-.bio{font-size:13px;color:${sub};margin:14px 0 20px;white-space:pre-wrap;line-height:2.1}
+.bio{font-size:13px;color:${bioColor};margin:14px 0 20px;white-space:pre-wrap;line-height:2.1}
 .snsrow{font-family:'IBM Plex Mono',monospace;font-size:11.5px;letter-spacing:.06em;margin-bottom:36px}
 .sns{color:${text};text-decoration:none;border-bottom:1px solid ${d.accent};padding-bottom:2px}
 .sns:hover{color:${d.accent}}
@@ -311,6 +326,7 @@ export default function App() {
   const pageText = d.darkText ? "#222426" : "#F4F5F6";
   const pageSub = d.darkText ? "#8A8F94" : "#C6CBD0";
   const pageLine = d.darkText ? "#22242622" : "#F4F5F633";
+  const pageBio = colorOr(d.bioColor, pageSub);
 
   /* ── マイページ(プロジェクト)管理 ── */
   useEffect(() => {
@@ -485,7 +501,7 @@ export default function App() {
     });
   const addBlock = (type) => {
     const presets = {
-      link: { title: "新しいリンク", desc: "", url: "", thumb: "" },
+      link: { title: "新しいリンク", desc: "", url: "", thumb: "", buttonBg: "", buttonText: "" },
       spacer: { size: "m" },
       text: { text: "SECTION" },
       image: { src: "", caption: "" },
@@ -837,6 +853,34 @@ export default function App() {
                           <input style={field} placeholder="タイトル" value={b.title} onChange={(e) => updateBlock(b.id, { title: e.target.value })} />
                           <input style={field} placeholder="説明(任意)" value={b.desc} onChange={(e) => updateBlock(b.id, { desc: e.target.value })} />
                           <input style={field} placeholder="https:// リンク先URL" value={b.url} onChange={(e) => updateBlock(b.id, { url: e.target.value })} />
+                          <div style={{ border: `1px solid ${UI.line}`, borderRadius: 8, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 10 }}>
+                            <MonoLabel>BUTTON COLOR</MonoLabel>
+                            <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center" }}>
+                              <label style={{ fontSize: 12, color: UI.ink, display: "flex", alignItems: "center", gap: 8 }}>
+                                背景
+                                <input
+                                  type="color"
+                                  value={colorOr(b.buttonBg, d.shape === "shadow" ? "#FFFFFF" : d.bg)}
+                                  onChange={(e) => updateBlock(b.id, { buttonBg: e.target.value })}
+                                  style={{ width: 32, height: 32, border: `1px solid ${UI.line}`, borderRadius: 8, cursor: "pointer", background: "none", padding: 2 }}
+                                />
+                              </label>
+                              <label style={{ fontSize: 12, color: UI.ink, display: "flex", alignItems: "center", gap: 8 }}>
+                                文字
+                                <input
+                                  type="color"
+                                  value={colorOr(b.buttonText, pageText)}
+                                  onChange={(e) => updateBlock(b.id, { buttonText: e.target.value })}
+                                  style={{ width: 32, height: 32, border: `1px solid ${UI.line}`, borderRadius: 8, cursor: "pointer", background: "none", padding: 2 }}
+                                />
+                              </label>
+                              {(b.buttonBg || b.buttonText) && (
+                                <button style={smallBtn(false)} onClick={() => updateBlock(b.id, { buttonBg: "", buttonText: "" })}>
+                                  色を戻す
+                                </button>
+                              )}
+                            </div>
+                          </div>
                           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                             <button style={smallBtn(false)} onClick={() => pickFile(b.id, (src) => updateBlock(b.id, { thumb: src }))}>
                               {b.thumb ? "サムネ変更" : "+ サムネ画像"}
@@ -933,6 +977,22 @@ export default function App() {
                 value={state.profile.bio}
                 onChange={(e) => setProfile({ bio: e.target.value })}
               />
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+                <label style={{ fontSize: 12, color: UI.ink, display: "flex", alignItems: "center", gap: 8 }}>
+                  bio文字色
+                  <input
+                    type="color"
+                    value={colorOr(d.bioColor, pageSub)}
+                    onChange={(e) => setDesign({ bioColor: e.target.value })}
+                    style={{ width: 32, height: 32, border: `1px solid ${UI.line}`, borderRadius: 8, cursor: "pointer", background: "none", padding: 2 }}
+                  />
+                </label>
+                {d.bioColor && (
+                  <button style={smallBtn(false)} onClick={() => setDesign({ bioColor: "" })}>
+                    色を戻す
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -1122,7 +1182,17 @@ export default function App() {
   }[d.shape];
 
   const renderPageBlock = (b) => {
-    if (b.type === "link")
+    if (b.type === "link") {
+      const buttonBg = colorOr(b.buttonBg, "");
+      const buttonText = colorOr(b.buttonText, "");
+      const customRowStyle = {
+        ...(buttonBg ? { background: buttonBg, borderColor: "transparent" } : {}),
+        ...(buttonText ? { color: buttonText } : {}),
+      };
+      const currentRowStyle = { ...rowStyle, ...customRowStyle };
+      const linkText = buttonText || pageText;
+      const linkSub = buttonText || pageSub;
+      const linkArrow = buttonText || d.accent;
       return (
         <a
           key={b.id}
@@ -1141,19 +1211,20 @@ export default function App() {
             textAlign: "left",
             borderRadius: 10,
             transition: "border-color .15s, transform .15s",
-            ...rowStyle,
+            ...currentRowStyle,
           }}
           onMouseEnter={(e) => { e.currentTarget.style.borderColor = d.accent; e.currentTarget.style.transform = "translateX(2px)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = rowStyle.border.includes("transparent") ? "transparent" : pageLine; e.currentTarget.style.transform = "none"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = currentRowStyle.border.includes("transparent") || buttonBg ? "transparent" : pageLine; e.currentTarget.style.transform = "none"; }}
         >
           {b.thumb && <img src={b.thumb} alt="" style={{ width: 44, height: 44, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />}
           <span style={{ display: "flex", flexDirection: "column", gap: 3, flex: 1, minWidth: 0 }}>
-            <span style={{ fontSize: 14.5, fontWeight: 700, letterSpacing: ".03em" }}>{b.title}</span>
-            {b.desc && <span style={{ fontSize: 11.5, color: pageSub }}>{b.desc}</span>}
+            <span style={{ fontSize: 14.5, fontWeight: 700, letterSpacing: ".03em", color: linkText }}>{b.title}</span>
+            {b.desc && <span style={{ fontSize: 11.5, color: linkSub }}>{b.desc}</span>}
           </span>
-          <span style={{ color: d.accent, fontSize: 15 }}>→</span>
+          <span style={{ color: linkArrow, fontSize: 15 }}>→</span>
         </a>
       );
+    }
 
     if (b.type === "spacer") return <div key={b.id} style={{ height: SPACER[b.size] || 44 }} />;
 
@@ -1256,7 +1327,7 @@ export default function App() {
           <div style={{ width: 92, height: 92, borderRadius: "50%", border: `1px solid ${pageLine}`, background: `${d.accent}26`, display: "inline-block" }} />
         )}
         <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: ".08em", marginTop: 18 }}>{state.profile.name}</h1>
-        <p style={{ fontSize: 13, color: pageSub, whiteSpace: "pre-wrap", lineHeight: 2.1, margin: "14px 0 20px" }}>{state.profile.bio}</p>
+        <p style={{ fontSize: 13, color: pageBio, whiteSpace: "pre-wrap", lineHeight: 2.1, margin: "14px 0 20px" }}>{state.profile.bio}</p>
 
         {activeSns.length > 0 && (
           <p style={{ fontFamily: UI.mono, fontSize: 11.5, letterSpacing: ".06em", marginBottom: 32 }}>
